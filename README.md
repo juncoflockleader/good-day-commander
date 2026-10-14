@@ -3,7 +3,7 @@
 用 AI 当参谋和双手，玩家只做指挥官的 RTS。玩家用自然语言下任何抽象层级的指令，
 从开局 brief 大战略到"空投金甲偷矿"，AI 负责执行并汇报。
 
-当前阶段：技能库接口 + 极简沙盒 + 最简执行器，三个技能能在沙盒里跑完整生命周期。没有真游戏适配器，没有 LLM 接入。
+当前阶段：技能库接口 + 沙盒 + 执行器 + 星际 2 适配器，三个技能在沙盒和真实星际 2 客户端里都跑通了。没有 LLM 接入。
 
 ## 分层
 
@@ -40,6 +40,9 @@ LLM 只住在战略层和两个横向层，不进战术层和微操层。技能�
 | `ai_rts/sandbox/scenario.py` | 标准场景：我方人族左上，敌方神族右下，128x128 |
 | `tests/test_lifecycle.py` | 九个测试：三个技能各自跑完、三个并发、取消时先接人、高优先级抢单位、前置检查失败、租约越权 |
 | `examples/run_sandbox.py` | 同时下三条指令，打印事件流 |
+| `ai_rts/adapters/sc2.py` | 星际 2 适配器：WorldView / Commander 落到 python-sc2，地图语义开局算一次，击杀归因靠推断 |
+| `examples/sc2_run.py` | 在真游戏里下指令，可用调试接口变单位，可存 replay |
+| `docker/` | 无头 Linux 客户端镜像、运行脚本、Rosetta 用的 mutex 对齐垫片 |
 
 ## 一条指令怎么流过去
 
@@ -120,8 +123,39 @@ Mac 版 5.0.17（Base98310）的 API 模式目前跑不起来，不是我们代�
 - 经 SC2Switcher 启动时 `-listen` 被解析但被忽略，走正常登录界面，不开 API 端口。
 - 在 lldb 下进入 API 模式的黑屏等待状态，但 150 秒内也不开端口。
 
-所以真游戏测试走 Linux 无头客户端：`burnysc2/python-sc2-docker` 镜像（SC2 4.10，amd64），在 colima 里用 Rosetta 跑。
-同一份适配器不用改，只是执行环境换到容器里。
+所以真游戏测试走 Linux 无头客户端，同一份适配器不用改，只是执行环境换到容器里。
+
+### Docker 无头客户端（Apple Silicon 上已跑通）
+
+镜像基于 `burnysc2/python-sc2-docker`（SC2 4.10 Linux 版，amd64，自带地图），在 colima 里用 Rosetta 跑。
+SC2 4.10 在 Rosetta 下加载地图时会 SIGBUS，原因是它有些 mutex 只按 2 字节对齐，Rosetta 翻成 ARM 原子指令跨 16 字节边界就炸。
+[docker/alignmutex.c](docker/alignmutex.c) 是 aiarena 社区的修法（来自
+[aiarena/local-play-bootstrap#22](https://github.com/aiarena/local-play-bootstrap/pull/22)），镜像里编译好，
+只给 SC2 进程 `LD_PRELOAD`。x86 宿主机把 `SC2_LD_PRELOAD` 设成空就不加载。
+
+```bash
+colima start --vz-rosetta
+```
+
+```bash
+docker build --platform linux/amd64 -t ai-rts-sc2 -f docker/Dockerfile .
+```
+
+```bash
+docker/run.sh 'scout={"target":"enemy_main","pattern":"circle"}' expand 'drop_harass={"cargo":{"specs":[{"type":"MARINE","count":4}]}}' --spawn MEDIVAC:1,MARINE:4 --save-replay replays/test.SC2Replay
+```
+
+没有画面，但 replay 存在 `replays/`，拖进 Mac 客户端就能看。三条指令并发，一局 113 游戏秒在 12 秒真实时间里跑完：
+
+```
+[  772   34.5s] drop_harass#3  INFO     phase     到达目标，卸货
+[  836   37.3s] drop_harass#3  NOTICE   phase     部队落地，开始骚扰
+[  864   38.6s] drop_harass#3  INFO     kill      击杀 PROBE
+[  876   39.1s] drop_harass#3  NOTICE   phase     触发撤退条件，接走部队
+[ 1204   53.8s] drop_harass#3  NOTICE   done      空投 enemy_mineral_line：击杀 1，损失 0，部队已撤回
+[ 1508   67.3s] scout#1  NOTICE   done      侦查 enemy_main：看到 建筑 GATEWAY、NEXUS、PYLON，单位 PROBE
+[ 2544  113.6s] expand#2  NOTICE   done      my_natural 分基建成
+```
 
 ### 星际 1
 

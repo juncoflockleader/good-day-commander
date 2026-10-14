@@ -169,9 +169,10 @@ class SC2World:
 
         nxt = await bot.get_next_expansion()
         my_nat = _pt(nxt) if nxt is not None else nearest_exp(start, [])
-        my_third = nearest_exp(my_nat, [start, my_nat])
         en_nat = nearest_exp(enemy, [])
-        en_third = nearest_exp(en_nat, [enemy, en_nat])
+        # 只有两矿位的小图上没有三矿，退回自然扩张位，别指到对面去
+        my_third = nearest_exp(my_nat, [start, my_nat, enemy, en_nat])
+        en_third = nearest_exp(en_nat, [enemy, en_nat, start, my_nat])
         center = _pt(bot.game_info.map_center)
         try:
             my_ramp = _pt(bot.main_base_ramp.top_center)
