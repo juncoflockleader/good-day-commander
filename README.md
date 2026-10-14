@@ -3,7 +3,7 @@
 用 AI 当参谋和双手，玩家只做指挥官的 RTS。玩家用自然语言下任何抽象层级的指令，
 从开局 brief 大战略到"空投金甲偷矿"，AI 负责执行并汇报。
 
-当前阶段：技能库接口 + 沙盒 + 执行器 + 星际 2 适配器，三个技能在沙盒和真实星际 2 客户端里都跑通了。没有 LLM 接入。
+当前阶段：技能库接口 + 沙盒 + 执行器 + 星际 2 适配器 + 理解层。一句话经 LLM 变成技能调用，在沙盒和真实星际 2 客户端里都跑通了。
 
 ## 分层
 
@@ -43,6 +43,12 @@ LLM 只住在战略层和两个横向层，不进战术层和微操层。技能�
 | `ai_rts/adapters/sc2.py` | 星际 2 适配器：WorldView / Commander 落到 python-sc2，地图语义开局算一次，击杀归因靠推断 |
 | `examples/sc2_run.py` | 在真游戏里下指令，可用调试接口变单位，可存 replay |
 | `docker/` | 无头 Linux 客户端镜像、运行脚本、Rosetta 用的 mutex 对齐垫片 |
+| `ai_rts/understanding.py` | 理解层：系统提示 + 词表 + 工具调用 → 注册表校验 → 一轮修复 → 可行性检查 |
+| `ai_rts/llm.py` | LLM 后端抽象：DeepSeek（OpenAI 兼容接口，零依赖）和 Claude（Anthropic SDK） |
+| `ai_rts/vocab.py` | 黑话词表：枪兵 → MARINE，高地下 → my_natural，偷矿 → drop_harass |
+| `examples/interpret.py` | 一句话 → 指令，可直接在沙盒里执行 |
+| `docker/say.sh` | 一句话直接进真游戏 |
+| `tests/test_understanding.py` | 假 LLM 测解析、修复轮、可行性检查，不联网 |
 
 ## 一条指令怎么流过去
 
@@ -95,6 +101,29 @@ python3 examples/print_tool_specs.py
 [ 1361   56.7s] drop_harass#3  NOTICE   phase     触发撤退条件，接走部队
 [ 1985   82.7s] drop_harass#3  NOTICE   done      空投 enemy_mineral_line：击杀 1，损失 0，部队已撤回
 ```
+
+## 理解层：一句话变指令
+
+理解层只做翻译，不碰执行。系统提示里是参谋的角色、六条规则和黑话词表；工具列表就是注册表导出的技能 schema。
+LLM 返回的每个 tool call 先经注册表实例化校验，不合法的拿错误信息再问一轮；给了 world 的话还会跑技能的 `check()`，
+把"没有运输机"这类可行性问题一起报出来。
+
+凭证：DeepSeek 用 `DEEPSEEK_API_KEY`，或 `DEEPSEEK_API_KEY_FILE` 指向存 key 的文件；Claude 用 `ANTHROPIC_API_KEY`。仓库根目录的 `.env` 也会读。
+
+```bash
+.venv/bin/python examples/interpret.py "一个农民去侦查9点钟，同时去高地下开分基，再空投4个枪兵偷矿"
+```
+
+```bash
+.venv/bin/python examples/interpret.py --run sandbox "空投金甲偷矿，顺便派个农民去对面主基地绕一圈看看"
+```
+
+```bash
+docker/say.sh "一个农民去对面主基地绕一圈侦查，同时高地下开分基，再空投枪兵偷矿" --spawn MEDIVAC:1,MARINE:8
+```
+
+DeepSeek flash 一次调用约 9K 输入 token，大头是技能 schema。`--provider claude --model claude-sonnet-5-5` 切 Claude，
+Claude 后端已按当前 API 写好（adaptive thinking、tool_choice auto、拒答服务端回退），但还没有 key 验证过。
 
 ## 接真游戏
 

@@ -7,3 +7,4 @@ replays/
 .debug/
 core
 core.*
+.env

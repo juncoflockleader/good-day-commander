@@ -1,1 +1,2 @@
 burnysc2>=7.3
+anthropic>=1.0
