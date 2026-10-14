@@ -97,5 +97,32 @@ python3 examples/print_tool_specs.py
 
 技能只依赖 `WorldView` 和 `Commander` 两个协议，换游戏就是换适配器。
 
-- 星际 2：官方 API 在 Mac 客户端里就有，`burnysc2` 直接可用，Apple Silicon 走 Rosetta 2。这是最快能上真游戏的路。
-- 星际 1：BWAPI 只有 Windows。Mac 上可行的是 OpenBW（引擎重实现，原生编译）加 1.16.1 的 MPQ 文件，或者 Windows 机器跑 BWAPI 再用网络桥接。放在星际 2 验证之后。
+### 星际 2 适配器
+
+[ai_rts/adapters/sc2.py](ai_rts/adapters/sc2.py) 用 `burnysc2` 实现了 WorldView 和 Commander，
+[examples/sc2_run.py](examples/sc2_run.py) 在真游戏里下指令。依赖装在 `.venv`：
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+地图放 `maps/`（已 gitignore），来源是 Blizzard 官方 Melee 地图包。
+
+```bash
+.venv/bin/python examples/sc2_run.py --map maps/Simple64.SC2Map 'scout={"target":"enemy_main","pattern":"circle"}' expand --spawn MEDIVAC:1,MARINE:4
+```
+
+### Mac 客户端的现状（2026-10-14）
+
+Mac 版 5.0.17（Base98310）的 API 模式目前跑不起来，不是我们代码的问题：
+
+- 任何非 Blizzard 签名的启动方式（直接执行、`open`、launchd、复刻 Switcher 的 NSWorkspace 调用）都在启动完成瞬间 `_exit(1)`。只有 Blizzard 的 SC2Switcher 或调试器能让它活下来，是启动器身份检查。
+- 经 SC2Switcher 启动时 `-listen` 被解析但被忽略，走正常登录界面，不开 API 端口。
+- 在 lldb 下进入 API 模式的黑屏等待状态，但 150 秒内也不开端口。
+
+所以真游戏测试走 Linux 无头客户端：`burnysc2/python-sc2-docker` 镜像（SC2 4.10，amd64），在 colima 里用 Rosetta 跑。
+同一份适配器不用改，只是执行环境换到容器里。
+
+### 星际 1
+
+BWAPI 只有 Windows。Mac 上可行的是 OpenBW（引擎重实现，原生编译）加 1.16.1 的 MPQ 文件，或者 Windows 机器跑 BWAPI 再用网络桥接。放在星际 2 验证之后。

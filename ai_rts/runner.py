@@ -14,7 +14,7 @@ from .arbiter import Arbiter, FundsStatus, Grant, GrantStatus, Lease, Priority, 
 from .events import EventKind, EventSink, Severity, SkillEvent
 from .skill import TERMINAL, LeaseStats, Skill, SkillContext, SkillResult, SkillStatus
 from .types import NamedRegion, UnitId, UnitSelector
-from .world import Commander, NotLeased, UnitView, WorldView
+from .world import Commander, Death, NotLeased, UnitView, WorldView
 
 CANCEL_GRACE_SECONDS = 30.0
 INCOME_WINDOW_FRAMES = 240
@@ -245,6 +245,7 @@ class SkillTask:
         self.ctx: SkillContext | None = None
         self.cancel_deadline: int | None = None
         self.waiting_emitted = False
+        self.last_tick_frame: int | None = None
 
     @property
     def id(self) -> int:
@@ -271,7 +272,7 @@ class SkillTask:
 
 class SimpleRunner:
     def __init__(self, world: WorldView, cmd: Commander, arbiter: SimpleArbiter, events: EventSink,
-                 deaths: Sequence[Any] | None = None) -> None:
+                 deaths: Sequence[Death] | None = None) -> None:
         self.world = world
         self.cmd = cmd
         self.arbiter = arbiter
@@ -354,8 +355,9 @@ class SimpleRunner:
         if task.cancel_deadline is not None and self.world.frame >= task.cancel_deadline:
             self._finish(task, SkillStatus.ABORTED, "取消后收尾超时，强制结束")
             return
-        if (self.world.frame - task.ctx.started_frame) % task.skill.tick_every != 0:
+        if task.last_tick_frame is not None and self.world.frame - task.last_tick_frame < task.skill.tick_every:
             return
+        task.last_tick_frame = self.world.frame
         status = task.skill.tick(task.ctx)
         if status in TERMINAL:
             self._finish(task, status)

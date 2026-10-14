@@ -112,5 +112,18 @@ class Commander(Protocol):
     def unload_all(self, transport: UnitId, at: Point) -> None: ...
 
 
+@dataclass(frozen=True)
+class Death:
+    """一次死亡。适配器把它追加到一个列表里，执行器据此统计击杀和阵亡。
+    真游戏的 API 通常不告诉你谁杀的，killer 允许是适配器的推断。"""
+
+    frame: Frame
+    victim: UnitId
+    victim_owner: PlayerId
+    victim_type: UnitType
+    killer: UnitId | None
+    killer_owner: PlayerId | None
+
+
 class NotLeased(Exception):
     """技能试图指挥不属于自己租约的单位。"""

@@ -15,7 +15,7 @@ from typing import Callable, Deque, Iterable, Sequence
 
 from ..types import (ClockPosition, Cost, Frame, Location, NamedRegion, NearUnit, PlayerId, Point, Resources,
                      Seconds, UnitId, UnitType)
-from ..world import Owner, RouteMode, ThreatEstimate
+from ..world import Death, Owner, RouteMode, ThreatEstimate
 from .catalog import CATALOG, FPS, RACE_ROLES, UnitTypeInfo
 
 NEUTRAL: PlayerId = 0
@@ -46,16 +46,6 @@ class Order:
     structure: str | None = None
     wait: int = 0
     auto: bool = False     # 自动接敌产生的
-
-
-@dataclass(frozen=True)
-class Death:
-    frame: Frame
-    victim: UnitId
-    victim_owner: PlayerId
-    victim_type: UnitType
-    killer: UnitId | None
-    killer_owner: PlayerId | None
 
 
 class SimUnit:
